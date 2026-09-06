@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1020"><title>五合一视频下载器 V2 Beta</title>
+<style>
+:root{--bg:#070b16;--card:#10182b;--muted:#91a0bd;--text:#eef4ff;--line:#22304f}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:radial-gradient(circle at 20% 0%,#1a2850 0,transparent 34%),radial-gradient(circle at 100% 20%,#24153d 0,transparent 28%),var(--bg);color:var(--text)}
+.wrap{width:min(980px,calc(100% - 28px));margin:auto;padding:52px 0 70px}.hero{text-align:center}.hero h1{font-size:clamp(30px,6vw,50px);margin:0 0 10px}.hero p{color:var(--muted);margin:0}
+.platforms{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin:22px 0 27px}.pill{border:1px solid var(--line);background:#0d1528;padding:8px 12px;border-radius:999px;font-size:13px}
+.card{background:rgba(16,24,43,.9);border:1px solid var(--line);border-radius:22px;padding:21px}.row{display:grid;grid-template-columns:auto 1fr auto;gap:11px}
+input{width:100%;border:1px solid var(--line);background:#090f1e;color:#fff;border-radius:14px;padding:16px;font-size:16px;outline:none}
+button{border:0;border-radius:14px;padding:0 20px;font-weight:750;font-size:15px;cursor:pointer}.paste{background:#17233d;color:#dce7ff;border:1px solid #2b3b61}.go{background:linear-gradient(135deg,#7893ff,#5d68f2);color:#fff;min-height:54px}
+button:disabled{opacity:.55}.tip{margin-top:12px;color:var(--muted);font-size:13px}.status{display:none;margin-top:15px;padding:13px 15px;border-radius:12px;background:#0a1121;font-size:14px}.status.bad{color:#ffd6da;border:1px solid #66313a}
+.result{display:none;margin-top:18px;border-top:1px solid var(--line);padding-top:18px}.head{display:grid;grid-template-columns:160px 1fr;gap:17px;margin-bottom:18px}.cover{width:100%;aspect-ratio:4/5;object-fit:cover;background:#080e1b;border-radius:14px;border:1px solid var(--line)}
+.title{font-size:20px;font-weight:800;line-height:1.45;margin:3px 0 8px}.sub{color:var(--muted);font-size:13px}.section{margin-top:18px}.section h3{font-size:16px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.media{border:1px solid var(--line);background:#0b1325;border-radius:14px;padding:12px;min-width:0}.media video,.media img{width:100%;max-height:300px;object-fit:contain;background:#050914;border-radius:10px;margin-bottom:10px}
+.mrow{display:flex;align-items:center;gap:10px}.mtext{flex:1;min-width:0}.mname{font-weight:800;font-size:14px}.quality{font-size:12px;color:var(--muted);margin-top:3px}.actions a{background:#edf2ff;color:#10182b;text-decoration:none;font-size:13px;font-weight:800;padding:9px 11px;border-radius:9px;white-space:nowrap}
+details{margin-top:18px;color:var(--muted);font-size:12px}pre{white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;background:#080e1b;padding:10px;border-radius:10px}
+footer{text-align:center;color:#71809f;font-size:12px;margin-top:20px}
+@media(max-width:680px){.wrap{padding-top:33px}.card{padding:15px}.row{grid-template-columns:1fr 1fr}.row input{grid-column:1/-1;grid-row:1}.head{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.cover{aspect-ratio:16/10}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<section class="hero"><h1>五合一视频下载器</h1><p>视频优先最高质量 · 图文提取全部 · 多段视频全部列出</p>
+<div class="platforms"><span class="pill">Instagram</span><span class="pill">X / Twitter</span><span class="pill">TikTok</span><span class="pill">抖音</span><span class="pill">小红书</span></div></section>
+<section class="card">
+<div class="row"><button id="paste" class="paste">一键粘贴</button><input id="url" placeholder="粘贴链接或完整分享文案"><button id="go" class="go">开始解析</button></div>
+<div class="tip">仅用于你有权保存的公开内容。抖音优先由本站后端直接解析，第三方接口仅作备用。</div><div id="status" class="status"></div>
+<div id="result" class="result">
+<div class="head"><img id="cover" class="cover"><div><div id="title" class="title"></div><div id="sub" class="sub"></div></div></div>
+<div id="ls" class="section" style="display:none"><h3>实况照片</h3><div id="lives" class="grid"></div></div>
+<div id="vs" class="section"><h3>视频</h3><div id="videos" class="grid"></div></div>
+<div id="is" class="section"><h3>图片</h3><div id="images" class="grid"></div></div>
+<div id="as" class="section"><h3>音频</h3><div id="audios" class="grid"></div></div>
+<details><summary>解析详情（如果结果不对，展开后截图给我）</summary><pre id="debug"></pre></details>
+</div>
+</section><footer>V2 Beta · 抖音改用本站自建解析 · 第三方仅作备用</footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/btch-downloader@6.3.6/dist/browser/index.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),input=$('#url'),go=$('#go'),paste=$('#paste'),st=$('#status'),result=$('#result');
+function status(t,b=false){st.textContent=t;st.style.display=t?'block':'none';st.className='status'+(b?' bad':'')}
+function extractUrl(t){const m=(t||'').match(/https?:\/\/[^\s<>"'，。；！？、]+/i);return m?m[0].replace(/[\)\]}>，。；！？、]+$/g,''):''}
+function detect(u){u=u.toLowerCase();if(u.includes('instagram.com/'))return['Instagram','igdl'];if(u.includes('tiktok.com/'))return['TikTok','ttdl'];if(u.includes('twitter.com/')||u.includes('x.com/'))return['X / Twitter','twitter'];if(u.includes('douyin.com/'))return['抖音','douyin'];if(u.includes('xiaohongshu.com/')||u.includes('xhslink.com/'))return['小红书','xiaohongshu'];return null}
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function num(o,ks){for(const k of ks){const n=Number(o?.[k]);if(Number.isFinite(n)&&n>0)return n}return 0}
+function b64urlDecode(s){
+ try{
+  s=s.replace(/-/g,'+').replace(/_/g,'/');
+  while(s.length%4)s+='=';
+  return decodeURIComponent(Array.prototype.map.call(atob(s),c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+ }catch{return''}
+}
+function tokenInfo(url){
+ try{
+  const u=new URL(url);
+  const token=u.searchParams.get('token');
+  if(!token)return null;
+  const parts=token.split('.');
+  if(parts.length<2)return null;
+  const payload=JSON.parse(b64urlDecode(parts[1]));
+  const original=String(payload.url||'');
+  const filename=String(payload.filename||'');
+  const combined=(original+' '+filename).toLowerCase();
+
+  let type='unknown';
+  if(/\.mp4(\?|$)|mime_type=video|video_mp4|\/video\//i.test(combined)) type='video';
+  else if(/\.mp3(\?|$)|audio|music/i.test(combined)) type='audio';
+  else if(/\.(jpg|jpeg|png|webp)(\?|$)/i.test(combined)) type='image';
+
+  let bitrate=0;
+  const br=original.match(/[?&](?:br|bt)=(\d+)/i);
+  if(br) bitrate=Number(br[1])*1000;
+
+  let score=0;
+  if(/_hd\.mp4|1080|2k|4k|origin|original|source/i.test(combined)) score+=8000;
+  if(bitrate) score+=bitrate/100;
+  if(type==='video') score+=5000;
+  if(type==='audio') score-=3000;
+
+  return {type,original,filename,bitrate,score};
+ }catch{return null}
+}
+function classify(path,url){
+ const p=path.toLowerCase(),u=url.toLowerCase();
+ const ti=tokenInfo(url);
+ if(ti&&ti.type!=='unknown')return ti.type;
+
+ if(/cover|thumbnail|thumb|avatar|poster|dynamic_cover|origin_cover/.test(p))return'image';
+ if(/image|images|image_list|photo|photos|picture/.test(p))return'image';
+ if(/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(u))return'image';
+ if(/play_addr|playurl|play_url|download_addr|download_url|video_url|video_list|bit_rate|bitrate|video\.|videos\.|video\[/.test(p))return'video';
+ if(/\.(mp4|m4v|mov|webm|m3u8)(\?|$)/i.test(u))return'video';
+ if(/\/video\/|mime_type=video|video\/mp4|playwm|play\//.test(u))return'video';
+ if(/audio|music|mp3/.test(p)||/\.mp3(\?|$)/i.test(u))return'audio';
+ return'unknown'
+}
+function xUrlMeta(url,path){
+ let score=0,width=0,height=0;
+ const u=String(url||'').toLowerCase(),p=String(path||'').toLowerCase();
+
+ // Twitter amplify_video URL 常带 /1280x720/ 或 /640x360/
+ const m=u.match(/\/(\d{3,4})x(\d{3,4})\//);
+ if(m){width=Number(m[1]);height=Number(m[2]);score+=width*height/100;}
+
+ if(/\.hd$/i.test(p) || /\/1280x720\//.test(u) || /\/1920x1080\//.test(u)) score+=12000;
+ if(/\.sd$/i.test(p) || /\/640x360\//.test(u)) score+=1000;
+ return {score,width,height};
+}
+function collect(root){
+ const out=[],seen=new WeakSet();
+ function walk(v,path,meta={score:0,bitrate:0,width:0,height:0}){
+  if(v==null)return;
+  if(typeof v==='string'&&/^https?:\/\//i.test(v)){
+   const type=classify(path,v);
+   if(type!=='unknown'){
+    const ti=tokenInfo(v);
+    const xm=xUrlMeta(v,path);
+    out.push({
+      url:v.replace(/&amp;/g,'&'),
+      type,path,
+      score:meta.score+(ti?.score||0)+(xm?.score||0),
+      bitrate:(ti?.bitrate||meta.bitrate||0),
+      width:xm.width||meta.width||0,height:xm.height||meta.height||0,
+      filename:ti?.filename||''
+    })
+   }
+   return
+  }
+  if(typeof v!=='object'||seen.has(v))return;
+  seen.add(v);
+  const br=num(v,['bit_rate','bitrate','bitRate','bps']),w=num(v,['width','video_width']),h=num(v,['height','video_height']);
+  let score=meta.score;
+  if(br)score+=Math.log10(br+1)*1000;
+  if(w&&h)score+=Math.sqrt(w*h);
+  const lp=path.toLowerCase();
+  if(/origin|original|source|highest|1080|2k|4k|hd/.test(lp))score+=3500;
+  if(/watermark|playwm|wm_video/.test(lp))score-=6000;
+  if(/cover|thumb|avatar|poster/.test(lp))score-=9000;
+  const nm={score,bitrate:br||meta.bitrate,width:w||meta.width,height:h||meta.height};
+  if(Array.isArray(v))v.forEach((x,i)=>walk(x,`${path}[${i}]`,nm));
+  else Object.entries(v).forEach(([k,x])=>walk(x,path?`${path}.${k}`:k,nm))
+ }
+ walk(root,'');
+ return out
+}
+function isSnapQualityPath(p){
+ return /\.links\[\d+\]\.url$/i.test(p);
+}
+function vkey(p){
+ if(isSnapQualityPath(p)) return p.replace(/\.links\[\d+\]\.url$/i,'.links');
+
+ // X/Twitter 常见返回：url[0].hd / url[1].sd
+ // hd 与 sd 是同一条视频的不同清晰度，应合并为一组。
+ if(/(?:^|\.)url\[\d+\]\.(hd|sd)$/i.test(p)){
+   return p.replace(/url\[\d+\]\.(hd|sd)$/i,'url.twitter_video');
+ }
+ if(/\.(hd|sd)$/i.test(p)){
+   return p.replace(/\.(hd|sd)$/i,'.twitter_video');
+ }
+
+ return p.replace(/\.(bit_rate|bitrate)\[\d+\].*$/i,'')
+         .replace(/\.(play_addr|playurl|play_url|download_addr|download_url)(\..*)?$/i,'')
+         .replace(/\.url_list\[\d+\].*$/i,'')
+}
+function ikey(p,u){
+ const m=p.match(/^(.*?(?:images?|image_list|photos?|pictures?)\[\d+\])/i);
+ return m?m[1]:u
+}
+function best(arr,type){
+ const g=new Map();
+ for(const c of arr.filter(x=>x.type===type)){
+  const k=type==='video'?vkey(c.path):ikey(c.path,c.url);
+  if(!g.has(k))g.set(k,[]);
+  g.get(k).push(c)
+ }
+ const out=[];
+ for(const a of g.values()){
+  const d=[...new Map(a.map(x=>[x.url,x])).values()].sort((x,y)=>y.score-x.score);
+  out.push(d[0])
+ }
+ return [...new Map(out.map(x=>[x.url,x])).values()]
+}
+function findText(o,keys){const seen=new WeakSet();function f(v){if(!v||typeof v!=='object'||seen.has(v))return'';seen.add(v);for(const k of keys)if(typeof v[k]==='string'&&v[k].trim())return v[k].trim();for(const x of Object.values(v)){const r=f(x);if(r)return r}return''}return f(o)}
+
+function pathIndex(path){
+ const m=String(path||'').match(/\[(\d+)\]/g);
+ if(!m||!m.length)return null;
+ return Number(m[m.length-1].replace(/\D/g,''));
+}
+function basenameStem(url){
+ try{
+  const ti=tokenInfo(url);
+  let f=(ti?.filename||new URL(url).pathname.split('/').pop()||'').toLowerCase();
+  return f.replace(/\.(mp4|mov|m4v|webm|jpg|jpeg|png|webp|avif)$/i,'')
+          .replace(/(_hd|_live|_video|_photo|_image)$/i,'');
+ }catch{return''}
+}
+function livePairScore(img,vid){
+ let score=0;
+ const ii=pathIndex(img.path),vi=pathIndex(vid.path);
+ if(ii!==null&&vi!==null&&ii===vi)score+=10;
+ const is=basenameStem(img.url),vs=basenameStem(vid.url);
+ if(is&&vs&&is===vs)score+=20;
+ const ip=(img.path||'').toLowerCase(),vp=(vid.path||'').toLowerCase();
+ if(/live|motion|dynamic|实况/.test(ip+' '+vp))score+=30;
+ return score;
+}
+function detectLivePairs(images,videos){
+ const lives=[],usedI=new Set(),usedV=new Set();
+ for(let i=0;i<images.length;i++){
+  let best=-1,bestScore=0;
+  for(let j=0;j<videos.length;j++){
+   if(usedV.has(j))continue;
+   const s=livePairScore(images[i],videos[j]);
+   if(s>bestScore){bestScore=s;best=j}
+  }
+  if(best>=0&&bestScore>=10){
+   lives.push({image:images[i],video:videos[best]});
+   usedI.add(i);usedV.add(best);
+  }
+ }
+ return {
+  lives,
+  images:images.filter((_,i)=>!usedI.has(i)),
+  videos:videos.filter((_,i)=>!usedV.has(i))
+ };
+}
+function liveCard(pair,i){
+ const d=document.createElement('div');d.className='media';
+ const img=pair.image,vid=pair.video;
+ d.innerHTML=`<div style="position:relative">
+   <img loading="lazy" src="${esc(img.url)}" alt="实况照片 ${i+1}">
+   <div style="position:absolute;right:10px;top:10px;background:rgba(0,0,0,.65);padding:5px 8px;border-radius:999px;font-size:12px">LIVE</div>
+  </div>
+  <div class="mrow">
+   <div class="mtext"><div class="mname">实况 ${i+1}</div><div class="quality">静态原图 + 实况视频</div></div>
+  </div>
+  <div class="actions" style="margin-top:10px">
+   <a href="${esc(img.url)}" target="_blank" rel="noopener">下载图片</a>
+   <a href="${esc(vid.url)}" target="_blank" rel="noopener">下载实况视频</a>
+  </div>`;
+ return d
+}
+
+function mediaUrl(m){
+  const u=String(m?.url||'');
+  if(m?.type==='video' && /(^https?:\/\/)?video\.twimg\.com\//i.test(u)){
+    return '/api/x-media?url='+encodeURIComponent(u);
+  }
+  if(/douyinvod\.com|douyinpic\.com|douyinstatic\.com|snssdk\.com|bytecdn\.cn|zjcdn\.com/i.test(u)){
+    return '/api/douyin-media?url='+encodeURIComponent(u);
+  }
+  return u;
+}
+function card(m,i){
+ const d=document.createElement('div');d.className='media';
+ const q=[];if(m.width&&m.height)q.push(`${m.width}×${m.height}`);if(m.bitrate)q.push(`${Math.round(m.bitrate/1000)} kbps`);
+ if(m.type==='video'&&/video\.twimg\.com/i.test(m.url)&&m.width>=1280)q.unshift('HD');
+
+ const displayUrl=mediaUrl(m);
+ const preview=m.type==='video'
+  ? `<video controls playsinline preload="metadata" src="${esc(displayUrl)}"></video>`
+  : m.type==='audio'
+  ? `<audio controls preload="metadata" style="width:100%;margin:12px 0" src="${esc(displayUrl)}"></audio>`
+  : `<img loading="lazy" src="${esc(displayUrl)}">`;
+
+ const label=m.type==='video'?'视频':m.type==='audio'?'音频':'图片';
+ const quality=m.type==='video'
+   ? (/video\.twimg\.com/i.test(m.url)?'X 最高画质优先':'最高质量优先')
+   : m.type==='audio'?'原始音频':'原图优先';
+
+ d.innerHTML=preview+`<div class="mrow"><div class="mtext"><div class="mname">${label} ${i+1}</div><div class="quality">${quality}${q.length?' · '+q.join(' · '):''}</div></div><div class="actions"><a href="${esc(displayUrl)}" target="_blank" rel="noopener">打开/下载</a></div></div>`;
+ return d
+}
+
+async function parseDouyinSelf(url){
+  const r=await fetch('/api/douyin-parse',{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({url})
+  });
+  let data={};
+  try{data=await r.json()}catch{}
+  if(!r.ok||!data?.ok)throw new Error(data?.error||`本站抖音解析返回 ${r.status}`);
+  return data;
+}
+function renderDouyinSelf(data){
+  $('#debug').textContent=JSON.stringify(data,null,2);
+  $('#title').textContent=data.title||'抖音作品';
+  $('#sub').textContent=`来源：抖音${data.author?' · '+data.author:''} · ${data.strategy||'本站解析'}`;
+
+  const cover=$('#cover');
+  if(data.cover){cover.src=mediaUrl({type:'image',url:data.cover});cover.style.display='block'}
+  else{cover.style.display='none'}
+
+  $('#lives').innerHTML='';$('#videos').innerHTML='';$('#images').innerHTML='';$('#audios').innerHTML='';
+  const vids=(data.videos||[]).map(v=>({type:'video',url:v.url,bitrate:v.bitrate||0,width:v.width||0,height:v.height||0,quality:v.label||'最高质量'}));
+  const imgs=(data.images||[]).map(u=>({type:'image',url:u}));
+  const aud=(data.audio||[]).map(u=>({type:'audio',url:u}));
+  vids.forEach((m,i)=>$('#videos').appendChild(card(m,i)));
+  imgs.forEach((m,i)=>$('#images').appendChild(card(m,i)));
+  aud.forEach((m,i)=>$('#audios').appendChild(card(m,i)));
+  $('#ls').style.display='none';
+  $('#vs').style.display=vids.length?'block':'none';
+  $('#is').style.display=imgs.length?'block':'none';
+  $('#as').style.display=aud.length?'block':'none';
+  result.style.display='block';
+  const parts=[];if(vids.length)parts.push(vids.length+' 个视频清晰度');if(imgs.length)parts.push(imgs.length+' 张图片');if(aud.length)parts.push(aud.length+' 个音频');
+  if(!parts.length)throw new Error('本站解析成功，但没有找到媒体地址');
+  status(`本站抖音解析成功：${parts.join('，')}。第三方 BOTCAHX 未参与本次解析。`);
+}
+async function parse(){
+ const raw=input.value.trim(),url=extractUrl(raw)||(/^https?:\/\//i.test(raw)?raw:'');
+ if(!url){status('没有找到有效链接。',true);return}
+ const p=detect(url);if(!p){status('暂不支持该平台。',true);return}
+ input.value=url;go.disabled=paste.disabled=true;result.style.display='none';
+ status(`已识别：${p[0]}，正在解析最高质量媒体…`);
+
+ try{
+  // V2：抖音先走本站 Netlify Function 自建解析；失败才使用第三方通用解析作备用。
+  if(p[0]==='抖音'){
+    try{
+      const own=await parseDouyinSelf(url);
+      renderDouyinSelf(own);
+      return;
+    }catch(ownErr){
+      console.warn('本站抖音解析失败，切换备用解析：',ownErr);
+      status('本站抖音解析暂时失败，正在切换备用解析…');
+    }
+  }
+
+  // 其他平台，以及本站抖音解析失败时，使用原通用解析器作为备用
+  if(!window.btch||typeof window.btch[p[1]]!=='function')throw Error('解析组件加载失败');
+  const data=await window.btch[p[1]](url);$('#debug').textContent=JSON.stringify(data,null,2);
+  const all=collect(data);let vid=best(all,'video'),aud=best(all,'audio');let img=best(all,'image');
+  if(vid.length)img=img.filter(x=>!/cover|thumbnail|thumb|avatar|poster|dynamic_cover|origin_cover/i.test(x.path));
+  // 稳定版：通用解析结果绝不再自动把“图片 + 视频”猜成实况。
+  // 只有专用解析器明确返回 videoUrl/live_photo 时，才显示实况。
+  const lives=[];
+  const cover=all.filter(x=>x.type==='image'&&/cover|thumbnail|thumb|poster|dynamic_cover|origin_cover/i.test(x.path)).sort((a,b)=>b.score-a.score)[0]||img[0];
+  $('#title').textContent=findText(data,['title','desc','description','caption','text','note_title'])||`${p[0]} 作品`;$('#sub').textContent=`来源：${p[0]}`;
+  if(cover){$('#cover').src=cover.url;$('#cover').style.display='block'}else $('#cover').style.display='none';
+  $('#lives').innerHTML='';$('#videos').innerHTML='';$('#images').innerHTML='';$('#audios').innerHTML='';
+  lives.forEach((m,i)=>$('#lives').appendChild(liveCard(m,i)));
+  vid.forEach((m,i)=>$('#videos').appendChild(card(m,i)));
+  img.forEach((m,i)=>$('#images').appendChild(card(m,i)));
+  aud.forEach((m,i)=>$('#audios').appendChild(card(m,i)));
+  $('#ls').style.display=lives.length?'block':'none';
+  $('#vs').style.display=vid.length?'block':'none';
+  $('#is').style.display=img.length?'block':'none';
+  $('#as').style.display=aud.length?'block':'none';
+  result.style.display='block';
+  if(!lives.length&&!vid.length&&!img.length&&!aud.length)throw Error('没有找到可用媒体地址，请展开“解析详情”截图给我。');
+  const parts=[];if(lives.length)parts.push(lives.length+' 个实况');if(vid.length)parts.push(vid.length+' 段视频');if(img.length)parts.push(img.length+' 张图片');if(aud.length)parts.push(aud.length+' 个音频');
+  status(p[0]==='X / Twitter'
+    ? `解析完成：${parts.join('，')}。X 已自动合并 HD/SD 清晰度并优先保留最高画质。`
+    : `解析完成：${parts.join('，')}。`);
+ }catch(e){
+  console.error(e);status('解析失败：'+(e?.message||e),true)
+ }finally{
+  go.disabled=paste.disabled=false
+ }
+}
+go.onclick=parse;input.onkeydown=e=>{if(e.key==='Enter')parse()};paste.onclick=async()=>{try{input.value=await navigator.clipboard.readText();await parse()}catch(e){status('无法读取剪贴板，请手动粘贴。',true)}}
+</script></body></html>

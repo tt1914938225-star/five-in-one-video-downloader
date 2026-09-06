@@ -1,0 +1,9 @@
+{
+  "name": "five-in-one-video-downloader",
+  "private": true,
+  "version": "2.0.0-beta.1",
+  "type": "module",
+  "dependencies": {
+    "@netlify/functions": "^4.2.5"
+  }
+}
