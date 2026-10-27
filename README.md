@@ -1,0 +1,68 @@
+# 五合一媒体下载器 V2 Beta
+
+原深色单页界面 + 同仓库 Netlify Functions。支持抖音、TikTok、Instagram、X / Twitter、小红书的平台识别和媒体适配；实际可用性取决于公开分享页面、解析服务和源站权限。
+
+本次修改是**已完成部分真实样本及 Netlify Preview 验收的 Beta 修复**，不是五个平台所有媒体类型全面实测通过的声明。各平台实测范围、上游波动及仍待验证的类型见下方验收记录；生产部署以 Netlify 当前发布状态为准。
+
+## 本地开发
+
+需要 Node.js 24、pnpm 11.25.0：
+
+```sh
+corepack enable
+corepack prepare pnpm@11.25.0 --activate
+pnpm install --frozen-lockfile
+cp .env.example .env
+```
+
+在 `.env` 中设置自己生成的 `MEDIA_TOKEN_SECRET`，再执行：
+
+```sh
+node --env-file=.env scripts/dev.mjs
+```
+
+访问 `http://127.0.0.1:8888`。本地服务器不模拟 Netlify CDN 路由和速率限制。
+
+```sh
+pnpm run check
+pnpm run test
+pnpm run build
+pnpm run verify:bundle
+```
+
+构建仅把 `index.html` 和 `app.js` 放入 `dist`，后端源码和测试不会进入静态发布目录。
+
+## 数据流
+
+```text
+分享文案 → 前后端分别校验平台域名
+  → POST /api/parse（抖音兼容 /api/douyin-parse）
+  → 抖音、小红书、Instagram 公开页面 / 配置的解析服务
+  → 平台适配器 → MediaItem + Variant
+  → 完整 GET 权限、响应类型、文件头、大小校验
+  → 有效资源获得 10 分钟加密下载凭证
+  → 预览 / 下载统一调用 /api/media
+  → 再次检查状态与媒体响应 → 文件完整接收后保存
+```
+
+超时、401/403、404/410、服务故障、HTML 错误页、格式不支持、凭证过期、重定向异常均返回中文错误及稳定错误码。只有封面没有作品媒体时不返回成功。有资源失败时明确返回 `partial`，失败项目没有下载地址。
+
+小红书同时识别 `xhslink.com`、`xhslink.cn` 分享链接，优先读取公开分享页面中对应作品的序列化数据。按作品类型区分视频封面与图集；仅图片条目明确标注实况时建立静态图与动态视频的关联。页面状态仅以 JSON 解析，不执行页面脚本；缺数据或校验失败时使用原解析服务回退。
+
+Instagram 优先读取公开页面中 `xig_polaris_media.if_not_gated_logged_out` 的结构化 JSON，作品 shortcode 必须匹配；按 `media_type`、`carousel_media`、`image_versions2`、`video_versions` 保留完整图集和每个视频。不会调用未公开接口、执行页面脚本或读取登录 Cookie。没有公开媒体数据时明确失败并保留服务回退。
+
+## 使用限制
+
+- Netlify 流式响应有大小和时间限制。本项目保守限制单文件 18 MiB；超限媒体不会被伪装成可下载。独立大文件下载后端尚未部署。
+- 已知分辨率优先比较像素面积，再比较码率；没有可靠尺寸时显示“分辨率未知”。不会声明获得源站未提供的最高画质。
+- 可用清晰度列表仅包含本次通过校验并选中的版本；候选版本在服务端保留。优先候选失败后才尝试备用版本。
+- 图片数组和多个视频按源数据结构逐项保留。未提供关联元数据时，图片与视频不会自动拼成实况照片。
+- 音视频播放列表、需要登录/付费/验证的资源不受支持；不添加平台 Cookie，不破解签名，不绕过验证。
+- 第三方服务未返回的图片、清晰度和实况元数据无法凭空恢复。服务返回结构变化时需要更新适配器。
+- 媒体探测检查 HTTP、格式与文件头，不执行完整音视频解码；源站之后仍可能撤销地址。下载时会再次校验并捕获传输失败。
+
+详细的现状分析、测试范围、环境变量、替换服务协议、Preview 和生产发布步骤见 [运行与验收说明](docs/OPERATIONS.md)。
+
+最新用户样本与 Preview 结果见 [2026-10-28 验收记录](docs/ACCEPTANCE-2026-10-28.md)。
+
+后续抖音原短链已完成一次 18 图与 1 段音频的 Preview 校验、预览和前端接收，详见 [抖音专项续验及限制](docs/DOUYIN-ACCEPTANCE-2026-10-28.md)。这不代表全部抖音类型或原站未下发的画质、实况资源已经恢复。

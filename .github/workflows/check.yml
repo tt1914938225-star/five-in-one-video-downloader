@@ -1,0 +1,22 @@
+name: V2 media regression checks
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: corepack prepare pnpm@11.25.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run test
+      - run: pnpm run build
+      - run: pnpm run verify:bundle

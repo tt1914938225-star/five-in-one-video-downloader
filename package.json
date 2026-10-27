@@ -1,9 +1,26 @@
 {
   "name": "five-in-one-video-downloader",
   "private": true,
-  "version": "2.0.0-beta.1",
+  "version": "2.0.0-beta.2",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check": "tsc --noEmit && node --check app.js",
+    "test": "node --test tests/*.test.mts",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/dev.mjs",
+    "verify:bundle": "node scripts/verify-bundle.mjs"
+  },
   "dependencies": {
-    "@netlify/functions": "^4.2.5"
-  }
+    "@netlify/functions": "^4.2.5",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "esbuild": "^0.25.0"
+  },
+  "packageManager": "pnpm@11.25.0"
 }
