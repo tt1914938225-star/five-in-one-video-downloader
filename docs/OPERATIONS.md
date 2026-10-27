@@ -141,7 +141,7 @@ Authorization: Bearer <PARSER_API_KEY，如配置>
 
 重点回归另覆盖：抖音中间 ID 与首页跳转、验证/删除/数据缺失、推荐列表误识别；X HD 拒绝后 SD 验证、双版本都失败、多段结构；小红书普通视频不误判实况、全部图片、替代图片 URL、部分失败；下载凭证过期/篡改、HEAD/Range、完整 GET 遭撤权、体积限制、未知体积、二进制 MIME、部分响应、SSRF 地址和重定向、独立适配器及源代码静态发布隔离。
 
-本次本地检查：类型与前端语法检查通过；自动测试 96 项通过、0 项失败；构建通过；5 个 Function 入口 esbuild 打包通过。浏览器模拟响应检查通过：三项图集顺序、两项可下载、一项 403 无按钮、详情脱敏、文件完整接收后保存。手机尺寸、真实视频解码和 Netlify CDN/Functions 集成仍待 Preview 验收。
+本次本地检查：类型与前端语法检查通过；自动测试 96 项通过、0 项失败；构建通过；5 个 Function 入口 esbuild 打包通过。浏览器模拟响应检查通过：三项图集顺序、两项可下载、一项 403 无按钮、详情脱敏、文件完整接收后保存。GitHub CI 和首个 Netlify Preview 构建也已通过。手机尺寸、真实视频解码和 Netlify CDN/Functions 集成仍待登录后验收。
 
 模拟 MP4/JPEG 数据用于协议和文件头测试，不是源站下载样本或完整音视频解码测试。公共实况测试主要验证版本化协议，真实源站能否返回实况标记必须手动验证。
 
@@ -150,14 +150,14 @@ Authorization: Bearer <PARSER_API_KEY，如配置>
 - 线上抖音错误及首页 302 已通过 curl 复现。
 - 原第三方服务本次请求超时，无法确认其目前解析成功率。
 - 本机 Node 的社交域名 DNS 解析得到保留地址，安全策略按设计拒绝；没有为完成测试放松私网保护。此环境中的 Node 请求不能代替 Netlify 实测。
-- Netlify 插件返回需要重新认证，无法读取项目部署状态、环境变量或创建/确认 Preview。本次没有运行生产部署。
+- Netlify 管理插件要求重新认证，无法读取或修改环境变量；但 PR 已触发仓库现有的自动部署，Netlify bot 确认 [Preview 已就绪](https://deploy-preview-1--five-in-one-video-downloader.netlify.app)，[构建记录](https://app.netlify.com/projects/five-in-one-video-downloader/deploys/6ae06aae86e512f339ab6f42) 显示构建完成。公开 HTTP 请求到首页、API 和源码测试路径均被 Netlify 登录页的 HTTP 401 拦截；浏览器明确显示“Team protection / This site is private / Sign in with an invited Netlify account to view it”。因此不能把这些 401 当作应用 API 或源码隔离的运行时验收结果。本次没有修改访问保护、合并 PR 或运行生产部署。
 - 没有当时失败的 X 签名 URL，无法断言此前“未经授权”的唯一原因。
 
 ## 七、Preview 验收与生产发布
 
 1. 将修复分支对应的草稿 PR 保持为未合并；重新连接 Netlify 账号，确认站点仍关联本仓库的 `main`，且 PR Deploy Previews 已启用。分支推送是否触发构建取决于站点配置，不能仅凭 PR 地址认定 Preview 就绪。
 2. 在 deploy-preview 上下文设置 `MEDIA_TOKEN_SECRET`（Functions 作用域），如有需要再设置解析服务地址和允许的 CDN 主机。不要直接改生产环境变量。
-3. 等待 PR 的 CI 和 Netlify 构建成功，从 Netlify 返回的真实 Preview 链接打开；不要把推测的 URL 当作成功部署。
+3. 从 [PR #1](https://github.com/tt1914938225-star/five-in-one-video-downloader/pull/1) 的 Netlify bot 链接打开真实 Preview；当前团队保护要求受邀 Netlify 账号登录。登录后再运行以下检查，不需要关闭站点访问保护；更新提交后确认对应最新构建成功。
 4. 检查首页和本地脚本加载；分别调用 `/api/parse`、`/api/douyin-parse`；`/netlify/functions/douyin-parse.mts`、`/server/config.mts`、`/tests/fixtures.mts` 应不可作为静态源码访问。
 5. 每个平台准备自己有权保存的公开链接。至少有一个有效分享链接/短链接和普通视频；支持图集的平台还测单图、多图；有真实实况元数据的平台测两资源配对。多段视频逐项核对源站数量。对于不存在的类型，记录“不适用”，不要用模拟结果证明真实平台能力。
 6. 抖音：重试给定短链并记录错误码；另提供刚复制的新短链和含作品 ID 的长链。如果原短链继续跳首页，应保留明确失败，不宣称已恢复此链接。
