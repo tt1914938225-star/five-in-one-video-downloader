@@ -62,3 +62,5 @@ Instagram 优先读取公开页面中 `xig_polaris_media.if_not_gated_logged_out
 - 媒体探测检查 HTTP、格式与文件头，不执行完整音视频解码；源站之后仍可能撤销地址。下载时会再次校验并捕获传输失败。
 
 详细的现状分析、测试范围、环境变量、替换服务协议、Preview 和生产发布步骤见 [运行与验收说明](docs/OPERATIONS.md)。
+
+最新用户样本与 Preview 结果见 [2026-10-28 验收记录](docs/ACCEPTANCE-2026-10-28.md)。
