@@ -1,6 +1,7 @@
 import { inputUrl, type Platform } from './config.mts';
 import { AppError, asError, failure } from './errors.mts';
 import { parseDouyin } from './douyin.mts';
+import { parseXiaohongshu } from './xiaohongshu.mts';
 import { parseProvider } from './provider.mts';
 import { verifyParsed } from './media.mts';
 import type { Fetcher } from './network.mts';
@@ -16,9 +17,9 @@ export async function handleParse(req: Request, only?: Platform, f?: Fetcher) {
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(45000)]);
     let parsed;
     let ownError: AppError | undefined;
-    if (platform === 'douyin') {
+    if (platform === 'douyin' || platform === 'xiaohongshu') {
       try {
-        parsed = await parseDouyin(url, f, signal);
+        parsed = await (platform === 'douyin' ? parseDouyin : parseXiaohongshu)(url, f, signal);
         return Response.json(await verifyParsed(parsed, f, signal), { headers: { 'Cache-Control': 'no-store' } });
       } catch (e) { ownError = asError(e); }
     }

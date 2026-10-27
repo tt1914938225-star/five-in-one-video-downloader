@@ -13,13 +13,20 @@ function cleanUrl(text) {
   const raw = text.match(/https?:\/\/[^\s<>"'，。；！？、]+/i)?.[0];
   if (!raw) throw new Error('没有找到有效分享链接。');
   const u = new URL(raw.replace(/[)\]}>，。；！？、]+$/g, ''));
-  const hosts = { douyin: ['douyin.com','iesdouyin.com'], tiktok: ['tiktok.com'], instagram: ['instagram.com'], twitter: ['x.com','twitter.com','t.co'], xiaohongshu: ['xiaohongshu.com','xhslink.com'] };
+  const hosts = { douyin: ['douyin.com','iesdouyin.com'], tiktok: ['tiktok.com'], instagram: ['instagram.com'], twitter: ['x.com','twitter.com','t.co'], xiaohongshu: ['xiaohongshu.com','xhslink.com','xhslink.cn'] };
   const platform = Object.keys(hosts).find(p => hosts[p].some(h => u.hostname === h || u.hostname.endsWith('.' + h)));
   if (!platform || u.username || u.password || u.port) throw new Error('暂不支持该分享链接。');
   u.protocol = 'https:'; return { url: u.href, platform };
 }
 function element(tag, className, text) {
   const node = document.createElement(tag); if (className) node.className = className; if (text) node.textContent = text; return node;
+}
+function invalidApiResponse(response) {
+  if (response.redirected) return '本站接口被重定向，可能需要重新登录预览站点后再解析。';
+  if (response.status === 401 || response.status === 403) return '本站接口拒绝访问，请检查站点登录或访问权限。';
+  if (response.status === 429) return '本站解析请求过于频繁，请稍后重试。';
+  if (response.status >= 500) return `本站解析服务暂时不可用（HTTP ${response.status}），请稍后重试。`;
+  return '本站接口没有返回有效数据，请检查部署路由或站点访问状态。';
 }
 function publicDebug(data) {
   return JSON.stringify(data, (key, value) => /url|token|signature|secret|authorization/i.test(key) ? (value ? '[已隐藏]' : value) : value, 2);
@@ -125,7 +132,7 @@ async function parse() {
     const response = await fetch(platform === 'douyin' ? '/api/douyin-parse' : '/api/parse', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }), signal: AbortSignal.timeout(55000),
     });
-    const data = await response.json().catch(() => { throw new Error('本站接口没有返回有效数据，请检查部署路由。'); });
+    const data = await response.json().catch(() => { throw new Error(invalidApiResponse(response)); });
     if (!response.ok || !data.ok) throw new Error((data.error || `解析失败（HTTP ${response.status}）`) + (data.fallback ? ' 备用服务：' + data.fallback.error : ''));
     render(data);
   } catch (e) { result.style.display = 'none'; status('解析失败：' + errorText(e), true); }

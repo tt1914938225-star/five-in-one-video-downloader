@@ -7,7 +7,7 @@ export const platformHosts = {
   douyin: ['douyin.com', 'iesdouyin.com'],
   tiktok: ['tiktok.com'], instagram: ['instagram.com'],
   twitter: ['x.com', 'twitter.com', 't.co'],
-  xiaohongshu: ['xiaohongshu.com', 'xhslink.com'],
+  xiaohongshu: ['xiaohongshu.com', 'xhslink.com', 'xhslink.cn'],
 } as const;
 export type Platform = keyof typeof platformHosts;
 export const names: Record<Platform, string> = { douyin: '抖音', tiktok: 'TikTok', instagram: 'Instagram', twitter: 'X / Twitter', xiaohongshu: '小红书' };
