@@ -18,16 +18,19 @@ export async function handleParse(req: Request, only?: Platform, f?: Fetcher) {
     if (only && platform !== only) throw new AppError('UNSUPPORTED_PLATFORM', '该接口仅接受抖音链接。', 400);
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(45000)]);
     let parsed;
+    let providerUrl = url;
     let ownError: AppError | undefined;
     const publicParser = publicParsers[platform];
     if (publicParser) {
       try {
-        parsed = await publicParser(url, f, signal);
+        parsed = platform === 'douyin'
+          ? await parseDouyin(url, f, signal, resolved => { providerUrl = resolved; })
+          : await publicParser(url, f, signal);
         return Response.json(await verifyParsed(parsed, f, signal), { headers: { 'Cache-Control': 'no-store' } });
       } catch (e) { ownError = asError(e); }
     }
     try {
-      parsed = await parseProvider(platform, url, f, signal);
+      parsed = await parseProvider(platform, providerUrl, f, signal);
       const result = await verifyParsed(parsed, f, signal);
       if (ownError) result.warnings.push(`本站解析：${ownError.message} 本次使用备用服务。`);
       return Response.json(result, { headers: { 'Cache-Control': 'no-store' } });

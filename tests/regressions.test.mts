@@ -197,11 +197,34 @@ test('Timeout messages distinguish parser service failures from media validation
 });
 test('Operator media host extension permits only the exact reviewed hostname', () => {
   const previous = process.env.MEDIA_ALLOWED_HOSTS;
-  process.env.MEDIA_ALLOWED_HOSTS = 'dl.tiktokio.com';
+  process.env.MEDIA_ALLOWED_HOSTS = 'dl.tiktokio.com,dl.snapcdn.app';
   try {
     assert.equal(mediaAllowed(new URL('https://dl.tiktokio.com/media')), true);
     assert.equal(mediaAllowed(new URL('https://dl.tiktokio.com.attacker.example/media')), false);
     assert.equal(mediaAllowed(new URL('https://other.dl.tiktokio.com/media')), false);
     assert.equal(mediaAllowed(new URL('https://unreviewed.tiktokio.com/media')), false);
+    assert.equal(mediaAllowed(new URL('https://dl.snapcdn.app/media')), true);
+    assert.equal(mediaAllowed(new URL('https://dl.snapcdn.app.attacker.example/media')), false);
+    assert.equal(mediaAllowed(new URL('https://other.dl.snapcdn.app/media')), false);
   } finally { if (previous === undefined) delete process.env.MEDIA_ALLOWED_HOSTS; else process.env.MEDIA_ALLOWED_HOSTS = previous; }
+});
+test('Douyin: resolved note identity is retained for fallback even when public page data is missing', async () => {
+  let resolved = '';
+  await assert.rejects(parseDouyin('https://v.douyin.com/fixture/', async url => url.includes('v.douyin.com')
+    ? new Response(null, { status: 302, headers: { location: `https://www.douyin.com/note/${id}?tracking=fixture` } })
+    : new Response('<html>public shell</html>'), undefined, url => { resolved = url; }), { code: 'PAGE_DATA_MISSING' });
+  assert.equal(resolved, `https://www.douyin.com/note/${id}`);
+});
+test('Douyin: provider fallback receives verified canonical work URL instead of resolving the short link again', async () => {
+  const { handleParse } = await import('../server/parse.mts');
+  let providerCalls = 0;
+  const mediaFetch = fixtureFetch(canonical([image()]));
+  const response = await handleParse(new Request('https://app.example/api/douyin-parse', { method: 'POST', body: JSON.stringify({ url: 'https://v.douyin.com/fixture/' }) }), 'douyin', async (url, init) => {
+    const u = new URL(url);
+    if (u.hostname === 'v.douyin.com') return new Response(null, { status: 302, headers: { location: `https://www.douyin.com/note/${id}?tracking=fixture` } });
+    if (u.hostname === 'www.douyin.com' || u.hostname === 'www.iesdouyin.com') return new Response('<html>public shell</html>');
+    if (u.hostname === 'backend1.tioo.eu.org') { providerCalls++; assert.equal(u.searchParams.get('url'), `https://www.douyin.com/note/${id}`); }
+    return mediaFetch(url, init);
+  });
+  const data = await response.json(); assert.equal(data.ok, true); assert.equal(providerCalls, 1); assert.equal(data.items[0].type, 'image');
 });

@@ -15,7 +15,7 @@ export async function parseProvider(platform: Platform, url: string, f?: Fetcher
     response = await safeFetch(target.href, u => u.origin === target.origin && u.pathname === target.pathname, {
       signal, headers, method: adapter ? 'POST' : 'GET',
       body: adapter ? JSON.stringify({ schemaVersion: 1, platform, url }) : undefined,
-    }, f);
+    }, f, undefined, platform === 'douyin' ? 12000 : 8000);
     text = await boundedText(response);
   } catch (e) {
     const error = asError(e);

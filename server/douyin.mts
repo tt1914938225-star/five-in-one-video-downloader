@@ -55,15 +55,25 @@ function checkPage(status: number, html: string) {
     throw new AppError('PLATFORM_RESTRICTED', '抖音分享页要求验证或限制当前访问，本站不会绕过验证。', 422);
   if (/作品已删除|视频已删除|作品不存在|视频不存在/.test(html)) throw new AppError('NOT_FOUND', '抖音作品已删除或不存在。', 422);
 }
-export async function parseDouyin(url: string, f?: Fetcher, signal?: AbortSignal) {
+export async function parseDouyin(url: string, f?: Fetcher, signal?: AbortSignal, onResolved?: (canonical: string) => void) {
   let id = extractAwemeId(url);
+  let kind = /\/(?:note|slides)\//.test(new URL(url).pathname) ? 'note' : 'video';
+  const remember = (hop: URL) => {
+    const found = extractAwemeId(hop.href);
+    id ||= found;
+    if (found && found === id) {
+      if (/\/(?:note|slides)\//.test(hop.pathname)) kind = 'note';
+      onResolved?.(`https://www.douyin.com/${kind}/${id}`);
+    }
+  };
+  remember(new URL(url));
   const hops: URL[] = [];
   let html = '';
   const init = { headers: { 'User-Agent': MOBILE_UA, Accept: 'text/html', 'Accept-Language': 'zh-CN,zh;q=0.9' }, signal };
   if (!id) {
     let response: Response;
     try {
-      response = await safeFetch(url, policy, init, f, hop => { hops.push(hop); id ||= extractAwemeId(hop.href); });
+      response = await safeFetch(url, policy, init, f, hop => { hops.push(hop); remember(hop); });
     } catch (e) { if (!id) throw e; response = new Response(''); }
     html = await boundedText(response);
     checkPage(response.status, html);
@@ -76,6 +86,7 @@ export async function parseDouyin(url: string, f?: Fetcher, signal?: AbortSignal
     if (!id) {
       throw new AppError('WORK_ID_MISSING', '分享页未提供可识别的作品 ID，可能受限或页面结构已变化。');
     }
+    onResolved?.(`https://www.douyin.com/${kind}/${id}`);
   }
   let work = pageData(html).map(root => findWork(root, id)).find(Boolean);
   if (!work) {
