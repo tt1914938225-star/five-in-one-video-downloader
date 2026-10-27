@@ -42,7 +42,9 @@ export async function safeFetch(raw: string, policy: Policy, init: RequestInit =
       const response = await f(url.href, { ...init, signal, redirect: 'manual' });
       if ([301,302,303,307,308].includes(response.status)) {
         const location = response.headers.get('location');
-        await response.body?.cancel();
+        // Cancellation is initiated, but acknowledgement must not block the next
+        // validated hop: a slow redirect body can otherwise stall resolution.
+        void response.body?.cancel().catch(() => {});
         if (!location) throw new AppError('BAD_REDIRECT', '源站重定向缺少目标地址。', 502);
         url = httpsUrl(new URL(location, url).href);
         continue;
@@ -63,6 +65,6 @@ export async function boundedText(response: Response, limit = 2 * 1024 * 1024) {
       if (size > limit) throw new AppError('RESPONSE_TOO_LARGE', '源站响应超过解析大小限制。', 502);
       chunks.push(value);
     }
-  } finally { await reader.cancel().catch(() => {}); }
+  } finally { void reader.cancel().catch(() => {}); }
   return Buffer.concat(chunks).toString('utf8');
 }

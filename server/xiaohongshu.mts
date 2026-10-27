@@ -62,7 +62,7 @@ export function normalizeXhsNote(note: any, id: string): Parsed {
 export async function parseXiaohongshu(url: string, f?: Fetcher, signal?: AbortSignal) {
   let id = noteId(url);
   const response = await safeFetch(url, policy, { signal, headers: { 'User-Agent': MOBILE_UA, Accept: 'text/html' } }, f, hop => { id ||= noteId(hop.href); });
-  if (!response.ok) { await response.body?.cancel(); throw httpError(response.status, '小红书分享页'); }
+  if (!response.ok) { void response.body?.cancel().catch(() => {}); throw httpError(response.status, '小红书分享页'); }
   const html = await boundedText(response);
   if (/<title[^>]*>[^<]*(验证|登录|访问限制)/i.test(html) || /captcha-container|请完成验证/.test(html))
     throw new AppError('PLATFORM_RESTRICTED', '小红书公开分享页要求登录或验证，本站不会绕过访问限制。');

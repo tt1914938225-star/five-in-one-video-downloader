@@ -263,3 +263,16 @@ test('Media: transient retries are bounded; denied media is never retried', asyn
   await assert.rejects(verifyParsed(normalizeProvider('douyin', canonical([image()])), async () => { calls++; return new Response('', { status: 403 }); }), { code: 'ACCESS_DENIED' });
   assert.equal(calls, 1);
 });
+test('Security: redirect cleanup cannot stall resolution and every new hop is still checked', { timeout: 1000 }, async () => {
+  let calls = 0, cancelled = false;
+  const body = new ReadableStream({ cancel() { cancelled = true; return new Promise<void>(() => {}); } });
+  const response = await safeFetch('https://video.twimg.com/start', mediaAllowed, {}, async () => {
+    calls++;
+    return calls === 1 ? new Response(body, { status: 302, headers: { location: '/final' } }) : new Response('resolved');
+  });
+  assert.equal(await response.text(), 'resolved'); assert.equal(calls, 2); assert.equal(cancelled, true);
+  calls = 0;
+  const unsafeBody = new ReadableStream({ cancel() { return new Promise<void>(() => {}); } });
+  await assert.rejects(safeFetch('https://video.twimg.com/start', mediaAllowed, {}, async () => { calls++; return new Response(unsafeBody, { status: 302, headers: { location: 'https://127.0.0.1/private' } }); }), { code: 'BLOCKED_HOST' });
+  assert.equal(calls, 1);
+});

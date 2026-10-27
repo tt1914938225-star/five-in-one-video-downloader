@@ -52,7 +52,7 @@ export function normalizeInstagram(media: any, code: string): Parsed {
 export async function parseInstagram(url: string, f?: Fetcher, signal?: AbortSignal) {
   let code = shortcode(url);
   const response = await safeFetch(url, u => hostMatches(u.hostname, 'instagram.com'), { signal, headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' } }, f, hop => { code ||= shortcode(hop.href); });
-  if (!response.ok) { await response.body?.cancel(); throw httpError(response.status, 'Instagram 公开页面'); }
+  if (!response.ok) { void response.body?.cancel().catch(() => {}); throw httpError(response.status, 'Instagram 公开页面'); }
   const html = await boundedText(response);
   if (!code) throw new AppError('WORK_ID_MISSING', 'Instagram 分享链接未跳转到可识别的作品。');
   return normalizeInstagram(publicMedia(html, code), code);
