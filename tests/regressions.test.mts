@@ -195,3 +195,13 @@ test('Timeout messages distinguish parser service failures from media validation
   await assert.rejects(parseProvider('tiktok', 'https://vm.tiktok.com/fixture/', timeout), error => error instanceof Error && error.message.includes('第三方解析服务'));
   await assert.rejects(probe(video().variants[0], timeout), error => error instanceof Error && error.message.includes('媒体资源校验'));
 });
+test('Operator media host extension permits only the exact reviewed hostname', () => {
+  const previous = process.env.MEDIA_ALLOWED_HOSTS;
+  process.env.MEDIA_ALLOWED_HOSTS = 'dl.tiktokio.com';
+  try {
+    assert.equal(mediaAllowed(new URL('https://dl.tiktokio.com/media')), true);
+    assert.equal(mediaAllowed(new URL('https://dl.tiktokio.com.attacker.example/media')), false);
+    assert.equal(mediaAllowed(new URL('https://other.dl.tiktokio.com/media')), false);
+    assert.equal(mediaAllowed(new URL('https://unreviewed.tiktokio.com/media')), false);
+  } finally { if (previous === undefined) delete process.env.MEDIA_ALLOWED_HOSTS; else process.env.MEDIA_ALLOWED_HOSTS = previous; }
+});

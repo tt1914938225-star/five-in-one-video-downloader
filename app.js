@@ -45,25 +45,41 @@ async function download(resource, button, errorNode) {
   } catch (e) { errorNode.textContent = errorText(e); status('下载失败：' + errorText(e), true); }
   finally { button.disabled = false; button.textContent = '下载'; }
 }
-function mediaCard(resource, label) {
+function mediaCard(resource, label, onMetadata = () => {}) {
   const card = element('div', 'media');
   const error = element('div', 'error', resource.error);
+  const qualityNode = element('div', 'quality');
+  const refreshQuality = () => {
+    const details = [resource.type === 'audio' ? '音频' : resource.quality || '未提供分辨率'];
+    if (resource.qualitySource === 'browser-preview') details.push('预览读取');
+    if (resource.bitrate) details.push(`${Math.round(resource.bitrate / 1000)} kbps`);
+    if (resource.bytes) details.push(resource.bytes < 1024 ? `${resource.bytes} B` : resource.bytes < 1024 * 1024 ? `${(resource.bytes / 1024).toFixed(1)} KiB` : `${(resource.bytes / 1024 / 1024).toFixed(1)} MiB`);
+    if (resource.fallback) details.push('优先候选不可用，已验证备用版本');
+    qualityNode.textContent = details.join(' · ');
+  };
+  refreshQuality();
   if (resource.previewUrl) {
     const tag = resource.type === 'image' ? 'img' : resource.type === 'audio' ? 'audio' : 'video';
     const preview = element(tag);
     if (tag === 'img') { preview.alt = label; preview.loading = 'lazy'; }
     else { preview.controls = true; preview.preload = 'metadata'; if (tag === 'video') preview.playsInline = true; }
+    if (tag === 'video' || tag === 'img') preview.addEventListener(tag === 'video' ? 'loadedmetadata' : 'load', () => {
+      if (!card.isConnected) return;
+      const width = tag === 'video' ? preview.videoWidth : preview.naturalWidth;
+      const height = tag === 'video' ? preview.videoHeight : preview.naturalHeight;
+      if (width > 0 && height > 0 && (width !== resource.width || height !== resource.height)) {
+        resource.width = width; resource.height = height; resource.quality = `${width}×${height}`;
+        resource.availableQualities = [resource.quality]; resource.qualitySource = 'browser-preview';
+        refreshQuality(); onMetadata();
+      }
+    });
     preview.src = resource.previewUrl;
     preview.addEventListener('error', () => { error.textContent = '预览不可用或链接已过期，请重新解析。'; });
     card.appendChild(preview);
   }
   const row = element('div', 'mrow'), text = element('div', 'mtext');
   text.appendChild(element('div', 'mname', label));
-  const details = [resource.quality || '未提供分辨率'];
-  if (resource.bitrate) details.push(`${Math.round(resource.bitrate / 1000)} kbps`);
-  if (resource.bytes) details.push(resource.bytes < 1024 ? `${resource.bytes} B` : resource.bytes < 1024 * 1024 ? `${(resource.bytes / 1024).toFixed(1)} KiB` : `${(resource.bytes / 1024 / 1024).toFixed(1)} MiB`);
-  if (resource.fallback) details.push('优先候选不可用，已验证备用版本');
-  text.appendChild(element('div', 'quality', details.join(' · '))); row.appendChild(text);
+  text.appendChild(qualityNode); row.appendChild(text);
   if (resource.downloadUrl) {
     const actions = element('div', 'actions'), button = element('button', '', '下载');
     button.onclick = () => download(resource, button, error); actions.appendChild(button); row.appendChild(actions);
@@ -73,19 +89,20 @@ function mediaCard(resource, label) {
 function render(data) {
   $('#title').textContent = data.title; $('#sub').textContent = `来源：${names[data.platform]}${data.author ? ' · ' + data.author : ''}`;
   $('#debug').textContent = publicDebug(data);
+  const refreshDetails = () => { $('#debug').textContent = publicDebug(data); };
   for (const id of ['lives','videos','images','audios']) $('#' + id).replaceChildren();
   const counts = { lives: 0, videos: 0, images: 0, audios: 0 };
   for (const item of data.items) {
     if (item.type === 'live_photo') {
       const group = element('div', 'media'); group.appendChild(element('div','mname', `实况照片 ${item.index}`));
-      if (item.image) group.appendChild(mediaCard(item.image, '静态图片'));
-      if (item.motion) group.appendChild(mediaCard(item.motion, '动态视频'));
+      if (item.image) group.appendChild(mediaCard(item.image, '静态图片', refreshDetails));
+      if (item.motion) group.appendChild(mediaCard(item.motion, '动态视频', refreshDetails));
       if (item.error) group.appendChild(element('div','error',item.error));
       $('#lives').appendChild(group); counts.lives++;
     } else {
       const section = item.type === 'image' ? 'images' : item.type === 'audio' ? 'audios' : 'videos';
       const label = item.type === 'image' ? '图片' : item.type === 'audio' ? '音频' : item.type === 'unknown' ? '未确认资源' : '视频';
-      $('#' + section).appendChild(mediaCard(item, `${label} ${item.index}`)); counts[section]++;
+      $('#' + section).appendChild(mediaCard(item, `${label} ${item.index}`, refreshDetails)); counts[section]++;
     }
   }
   for (const [id, key] of [['ls','lives'],['vs','videos'],['is','images'],['as','audios']]) $('#' + id).style.display = counts[key] ? 'block' : 'none';
