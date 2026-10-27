@@ -64,3 +64,5 @@ Instagram 优先读取公开页面中 `xig_polaris_media.if_not_gated_logged_out
 详细的现状分析、测试范围、环境变量、替换服务协议、Preview 和生产发布步骤见 [运行与验收说明](docs/OPERATIONS.md)。
 
 最新用户样本与 Preview 结果见 [2026-10-28 验收记录](docs/ACCEPTANCE-2026-10-28.md)。
+
+后续抖音原短链已完成一次 18 图与 1 段音频的 Preview 校验、预览和前端接收，详见 [抖音专项续验及限制](docs/DOUYIN-ACCEPTANCE-2026-10-28.md)。这不代表全部抖音类型或原站未下发的画质、实况资源已经恢复。
