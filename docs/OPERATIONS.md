@@ -2,6 +2,8 @@
 
 检查日期：2026-10-27（Asia/Shanghai）。基线：`main` 的 `97aef28`。本地初始目录为空，克隆仓库后检查原工作区干净，再建立 `fix/v2-beta-media-pipeline` 分支。
 
+后续已通过 Chrome 登录继续运行时验收，并补充修复。最新配置、99 项测试及真实平台结果见 [Preview 续验记录](ACCEPTANCE-2026-10-27.md)。下文保留初次检查的时间点和部署方法。
+
 ## 一、原有结构和问题证据
 
 仓库原有六个文件：`index.html`、`package.json`、`netlify.toml` 和三个 Functions（`douyin-parse.mts`、`douyin-media.mts`、`x-media.mts`）。无锁文件、自动化测试或独立平台适配器。

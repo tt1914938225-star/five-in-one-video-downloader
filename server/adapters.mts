@@ -97,7 +97,16 @@ export function normalizeProvider(platform: Platform, raw: any): Parsed {
     }
   } else if (platform === 'xiaohongshu') {
     const notes = Array.isArray(d.notes) ? d.notes : [d.notes ?? d];
-    for (const note of notes) {
+    // A share landing page may contain a logo and still be labelled successful upstream.
+    // Legacy responses must identify the work before any image becomes a post resource.
+    const identified = notes.filter((note: any) => {
+      if (!note || typeof note !== 'object' || Array.isArray(note)) return false;
+      const id = note?.noteId ?? note?.note_id ?? (notes.length === 1 ? d.noteId ?? d.note_id : undefined);
+      return typeof id === 'string' && id.trim().length > 0;
+    });
+    if (!identified.length) throw new AppError('POST_IDENTITY_MISSING', '解析服务未返回小红书作品标识，可能只打开了分享落地页或链接已失效。请重新复制公开作品链接。');
+    if (identified.length < notes.length) result.warnings.push('部分条目缺少作品标识，未作为作品媒体处理。');
+    for (const note of identified) {
       for (const img of note.images ?? note.imageList ?? []) addImage(img);
       const clips = note.videos ?? (note.video ? [note.video] : note.videoUrl ? [note.videoUrl] : []);
       for (const clip of clips) {

@@ -74,7 +74,14 @@ export async function probe(source: Variant, f?: Fetcher, signal?: AbortSignal) 
   if (expiredUrl(source.url)) throw new AppError('LINK_EXPIRED', '源站临时媒体地址已过期，请重新解析。', 410);
   // Probe the same full-GET permission used by downloads; a Range-only success may be misleading.
   // Stop reading after the file header rather than buffering the entire object.
-  const response = await safeFetch(source.url, mediaAllowed, { signal, headers: { Accept: 'video/mp4,video/webm,image/*,audio/*', 'Accept-Encoding': 'identity' } }, f);
+  let response: Response;
+  try {
+    response = await safeFetch(source.url, mediaAllowed, { signal, headers: { Accept: 'video/mp4,video/webm,image/*,audio/*', 'Accept-Encoding': 'identity' } }, f);
+  } catch (e) {
+    const error = asError(e);
+    if (error.code === 'TIMEOUT') throw new AppError('TIMEOUT', '媒体资源校验超时，请重新解析或稍后重试。', 504);
+    throw error;
+  }
   try {
     if (response.status === 206) throw new AppError('PARTIAL_MEDIA', '源站在完整下载请求中仅返回部分媒体，未提供下载。', 502);
     if (!response.ok) throw httpError(response.status);
@@ -93,6 +100,10 @@ export async function probe(source: Variant, f?: Fetcher, signal?: AbortSignal) 
       }
       return meta;
     } finally { await data.reader.cancel().catch(() => {}); }
+  } catch (e) {
+    const error = asError(e);
+    if (error.code === 'TIMEOUT') throw new AppError('TIMEOUT', '媒体资源校验超时，请重新解析或稍后重试。', 504);
+    throw error;
   } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
 }
 export interface PublicResource {

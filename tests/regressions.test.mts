@@ -62,18 +62,18 @@ test('XHS: ordinary video plus cover is never a live photo', async () => {
   assert.equal(result.items.length, 1); assert.equal(result.items[0].type, 'video'); assert.ok(result.previewUrl);
 });
 test('XHS: complete gallery, alternate image hosts, failure cards and cover preview', async () => {
-  const parsed = normalizeProvider('xiaohongshu', { result: { images: ['https://video.twimg.com/a.jpg', { url_list: ['https://video.twimg.com/denied.jpg','https://video.twimg.com/b.jpg'] }, 'https://video.twimg.com/missing.jpg'] } });
+  const parsed = normalizeProvider('xiaohongshu', { result: { noteId: 'fixture-note', images: ['https://video.twimg.com/a.jpg', { url_list: ['https://video.twimg.com/denied.jpg','https://video.twimg.com/b.jpg'] }, 'https://video.twimg.com/missing.jpg'] } });
   const result = await verifyParsed(parsed, fixtureFetch({}, { brokenImage: 'missing' }));
   assert.equal(result.items.length, 3); assert.equal(result.partial, true); assert.ok(result.items[1].downloadUrl); assert.equal(result.items[2].code, 'ACCESS_DENIED');
 });
 test('XHS: explicit per-image live metadata pairs both; filename/index coincidence does not', () => {
-  const paired = normalizeProvider('xiaohongshu', { result: { images: [{ type: 'live_photo', url: 'https://video.twimg.com/a.jpg', videoUrl: 'https://video.twimg.com/a.mp4' }] } });
+  const paired = normalizeProvider('xiaohongshu', { result: { noteId: 'fixture-note', images: [{ type: 'live_photo', url: 'https://video.twimg.com/a.jpg', videoUrl: 'https://video.twimg.com/a.mp4' }] } });
   assert.equal(paired.items[0].type, 'live_photo');
-  const separate = normalizeProvider('xiaohongshu', { result: { images: ['https://video.twimg.com/a.jpg'], videos: ['https://video.twimg.com/a.mp4'] } });
+  const separate = normalizeProvider('xiaohongshu', { result: { noteId: 'fixture-note', images: ['https://video.twimg.com/a.jpg'], videos: ['https://video.twimg.com/a.mp4'] } });
   assert.deepEqual(separate.items.map(x => x.type), ['image','video']);
 });
 test('XHS: image-only post never invents video URLs', () => {
-  const parsed = normalizeProvider('xiaohongshu', { result: { images: ['https://video.twimg.com/a.jpg','https://video.twimg.com/b.jpg'] } });
+  const parsed = normalizeProvider('xiaohongshu', { result: { noteId: 'fixture-note', images: ['https://video.twimg.com/a.jpg','https://video.twimg.com/b.jpg'] } });
   assert.ok(parsed.items.every(i => i.type === 'image'));
 });
 test('Instagram: raw provider entries classify from actual MIME, preserving carousel order', async () => {
@@ -165,7 +165,7 @@ test('Versioned independent parser adapter uses the documented POST protocol and
   } finally { delete process.env.PARSER_ADAPTER_URL; delete process.env.PARSER_API_KEY; }
 });
 test('Malformed provider structure is reported as a schema change', async () => {
-  await assert.rejects(parseProvider('xiaohongshu', 'https://xhslink.com/o/fixture', async () => Response.json({ result: { images: { invalid: true } } })), { code: 'PROVIDER_SCHEMA_CHANGED' });
+  await assert.rejects(parseProvider('xiaohongshu', 'https://xhslink.com/o/fixture', async () => Response.json({ result: { noteId: 'fixture-note', images: { invalid: true } } })), { code: 'PROVIDER_SCHEMA_CHANGED' });
 });
 test('Generic binary MIME uses file signatures and explicit type metadata; ambiguous containers are rejected', async () => {
   const f = async () => new Response(mp4, { headers: { 'content-type': 'application/octet-stream', 'content-length': String(mp4.length) } });
@@ -175,4 +175,23 @@ test('Generic binary MIME uses file signatures and explicit type metadata; ambig
   await assert.rejects(probe({ url: 'https://video.twimg.com/ambiguous.bin', type: 'unknown' }, f), { code: 'UNSUPPORTED_FORMAT' });
   const head = await deliver(new Request('https://app.example' + result.items[0].downloadUrl, { method: 'HEAD' }), f);
   assert.equal(head.headers.get('content-type'), 'video/mp4');
+});
+test('XHS: a successful landing-page response with empty identity cannot turn a site image into media', () => {
+  const payload = { status: true, result: { noteId: '', title: 'Landing page', images: ['https://fe-s10.rednotecdn.com/static/logo.png'], downloads: [] } };
+  assert.throws(() => normalizeProvider('xiaohongshu', payload), { code: 'POST_IDENTITY_MISSING' });
+  payload.result.noteId = '   ';
+  assert.throws(() => normalizeProvider('xiaohongshu', payload), { code: 'POST_IDENTITY_MISSING' });
+});
+test('XHS: nested identified notes retain every gallery and ignore unidentifiable landing entries', () => {
+  const parsed = normalizeProvider('xiaohongshu', { result: { notes: [
+    { noteId: 'note-one', images: ['https://video.twimg.com/a.jpg','https://video.twimg.com/b.jpg'] },
+    { note_id: 'note-two', images: ['https://video.twimg.com/c.jpg'] },
+    { images: ['https://video.twimg.com/logo.jpg'] },
+  ] } });
+  assert.equal(parsed.items.length, 3); assert.equal(parsed.warnings.length, 1);
+});
+test('Timeout messages distinguish parser service failures from media validation failures', async () => {
+  const timeout = async () => { throw new DOMException('timeout', 'TimeoutError'); };
+  await assert.rejects(parseProvider('tiktok', 'https://vm.tiktok.com/fixture/', timeout), error => error instanceof Error && error.message.includes('第三方解析服务'));
+  await assert.rejects(probe(video().variants[0], timeout), error => error instanceof Error && error.message.includes('媒体资源校验'));
 });

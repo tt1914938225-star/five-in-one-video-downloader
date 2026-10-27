@@ -66,7 +66,7 @@ export function platformSuite(platform: Platform) {
     assert.equal(data.ok, false); assert.ok(!JSON.stringify(data).includes('private token'));
   });
   test(`${platform}: cover alone cannot be downloaded as post media`, async () => {
-    const parsed = normalizeProvider(platform, { title: 'only cover', thumbnail: 'https://video.twimg.com/photo.jpg' });
+    const parsed = normalizeProvider(platform, { noteId: 'fixture-note', title: 'only cover', thumbnail: 'https://video.twimg.com/photo.jpg' });
     assert.equal(parsed.items.length, 0);
     const { data } = await parse({ ...canonical([]), thumbnail: 'https://video.twimg.com/photo.jpg' }); assert.equal(data.ok, false);
   });

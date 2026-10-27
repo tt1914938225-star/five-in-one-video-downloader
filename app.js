@@ -91,8 +91,10 @@ function render(data) {
   for (const [id, key] of [['ls','lives'],['vs','videos'],['is','images'],['as','audios']]) $('#' + id).style.display = counts[key] ? 'block' : 'none';
   const firstImage = data.items.find(i => i.type === 'image' && i.previewUrl)?.previewUrl || data.items.find(i => i.image?.previewUrl)?.image?.previewUrl;
   const cover = $('#cover'), coverUrl = data.previewUrl || firstImage;
+  const head = cover.parentElement;
+  head.classList.toggle('no-cover', !coverUrl);
   cover.style.display = coverUrl ? 'block' : 'none';
-  if (coverUrl) { cover.src = coverUrl; cover.onerror = () => { cover.style.display = 'none'; }; } else cover.removeAttribute('src');
+  if (coverUrl) { cover.src = coverUrl; cover.onerror = () => { cover.style.display = 'none'; head.classList.add('no-cover'); }; } else cover.removeAttribute('src');
   result.style.display = 'block';
   const count = data.items.reduce((sum, i) => sum + (i.downloadUrl ? 1 : 0) + (i.image?.downloadUrl ? 1 : 0) + (i.motion?.downloadUrl ? 1 : 0), 0);
   status(`${data.partial ? '部分资源可用' : '媒体校验完成'}：${count} 个资源可下载。${(data.warnings || []).join(' ')} ${data.verification || ''}`, data.partial);
