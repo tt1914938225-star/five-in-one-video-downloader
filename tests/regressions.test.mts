@@ -228,3 +228,38 @@ test('Douyin: provider fallback receives verified canonical work URL instead of 
   });
   const data = await response.json(); assert.equal(data.ok, true); assert.equal(providerCalls, 1); assert.equal(data.items[0].type, 'image');
 });
+test('Media: slow upstream cancellation cannot hold a verified resource until gateway timeout', { timeout: 1000 }, async () => {
+  let cancelled = false;
+  const stream = new ReadableStream({
+    start(c) { c.enqueue(mp4); },
+    cancel() { cancelled = true; return new Promise<void>(() => {}); },
+  });
+  const result = await probe(video().variants[0], async () => new Response(stream, { headers: { 'content-type': 'video/mp4', 'content-length': String(mp4.length) } }));
+  assert.equal(result.type, 'video'); assert.equal(result.bytes, mp4.length); assert.equal(cancelled, true);
+});
+test('Media: transfer errors reach the client even when upstream cancellation never settles', { timeout: 1000 }, async () => {
+  let cancelled = false, pulled = false;
+  const body = new ReadableStream({
+    start(c) { c.enqueue(mp4); },
+    pull(c) { if (!pulled) { pulled = true; c.enqueue(new Uint8Array(MAX_TRANSFER)); } },
+    cancel() { cancelled = true; return new Promise<void>(() => {}); },
+  });
+  const token = seal({ url: 'https://video.twimg.com/a.mp4', type: 'video', platform: 'douyin', mime: 'video/mp4', filename: 'a.mp4', exp: Date.now() + 10000 });
+  const response = await deliver(new Request('https://app.example/api/media?token=' + token), async () => new Response(body, { headers: { 'content-type': 'video/mp4' } }));
+  await assert.rejects(response.arrayBuffer(), { code: 'MEDIA_TOO_LARGE' }); assert.equal(cancelled, true);
+});
+test('Media: one transient timeout is retried and succeeds only after full validation', async () => {
+  let calls = 0;
+  const result = await verifyParsed(normalizeProvider('douyin', canonical([image()])), async (url, init) => {
+    calls++; if (calls === 1) throw new DOMException('timeout', 'TimeoutError');
+    return fixtureFetch({})(url, init);
+  });
+  assert.equal(calls, 2); assert.equal(result.items[0].type, 'image'); assert.ok(result.items[0].downloadUrl);
+});
+test('Media: transient retries are bounded; denied media is never retried', async () => {
+  let calls = 0;
+  await assert.rejects(verifyParsed(normalizeProvider('douyin', canonical([image()])), async () => { calls++; throw new DOMException('timeout', 'TimeoutError'); }), { code: 'TIMEOUT' });
+  assert.equal(calls, 2); calls = 0;
+  await assert.rejects(verifyParsed(normalizeProvider('douyin', canonical([image()])), async () => { calls++; return new Response('', { status: 403 }); }), { code: 'ACCESS_DENIED' });
+  assert.equal(calls, 1);
+});

@@ -97,8 +97,8 @@ function render(data) {
   $('#title').textContent = data.title; $('#sub').textContent = `来源：${names[data.platform]}${data.author ? ' · ' + data.author : ''}`;
   $('#debug').textContent = publicDebug(data);
   const refreshDetails = () => { $('#debug').textContent = publicDebug(data); };
-  for (const id of ['lives','videos','images','audios']) $('#' + id).replaceChildren();
-  const counts = { lives: 0, videos: 0, images: 0, audios: 0 };
+  for (const id of ['lives','videos','images','audios','unknowns']) $('#' + id).replaceChildren();
+  const counts = { lives: 0, videos: 0, images: 0, audios: 0, unknowns: 0 };
   for (const item of data.items) {
     if (item.type === 'live_photo') {
       const group = element('div', 'media'); group.appendChild(element('div','mname', `实况照片 ${item.index}`));
@@ -107,12 +107,12 @@ function render(data) {
       if (item.error) group.appendChild(element('div','error',item.error));
       $('#lives').appendChild(group); counts.lives++;
     } else {
-      const section = item.type === 'image' ? 'images' : item.type === 'audio' ? 'audios' : 'videos';
+      const section = item.type === 'image' ? 'images' : item.type === 'audio' ? 'audios' : item.type === 'video' ? 'videos' : 'unknowns';
       const label = item.type === 'image' ? '图片' : item.type === 'audio' ? '音频' : item.type === 'unknown' ? '未确认资源' : '视频';
       $('#' + section).appendChild(mediaCard(item, `${label} ${item.index}`, refreshDetails)); counts[section]++;
     }
   }
-  for (const [id, key] of [['ls','lives'],['vs','videos'],['is','images'],['as','audios']]) $('#' + id).style.display = counts[key] ? 'block' : 'none';
+  for (const [id, key] of [['ls','lives'],['vs','videos'],['is','images'],['as','audios'],['us','unknowns']]) $('#' + id).style.display = counts[key] ? 'block' : 'none';
   const firstImage = data.items.find(i => i.type === 'image' && i.previewUrl)?.previewUrl || data.items.find(i => i.image?.previewUrl)?.image?.previewUrl;
   const cover = $('#cover'), coverUrl = data.previewUrl || firstImage;
   const head = cover.parentElement;

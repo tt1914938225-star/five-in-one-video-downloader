@@ -67,7 +67,7 @@ async function prefix(response: Response) {
       const { value, done } = await reader.read(); if (done) break;
       chunks.push(value); size += value.length;
     }
-  } catch (e) { await reader.cancel().catch(() => {}); throw e; }
+  } catch (e) { void reader.cancel().catch(() => {}); throw e; }
   return { reader, chunks, bytes: Buffer.concat(chunks) };
 }
 export async function probe(source: Variant, f?: Fetcher, signal?: AbortSignal) {
@@ -99,12 +99,14 @@ export async function probe(source: Variant, f?: Fetcher, signal?: AbortSignal) 
         meta.bytes = size;
       }
       return meta;
-    } finally { await data.reader.cancel().catch(() => {}); }
+    // Initiate cancellation immediately, but do not wait for the upstream socket's
+    // cleanup acknowledgement: some proxies leave it pending after a valid header.
+    } finally { void data.reader.cancel().catch(() => {}); }
   } catch (e) {
     const error = asError(e);
     if (error.code === 'TIMEOUT') throw new AppError('TIMEOUT', '媒体资源校验超时，请重新解析或稍后重试。', 504);
     throw error;
-  } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
+  } finally { if (!response.body?.locked) void response.body?.cancel().catch(() => {}); }
 }
 export interface PublicResource {
   id: string; index: number; type: MediaType | 'live_photo'; title: string; platform: string;
@@ -130,7 +132,15 @@ export async function verifyParsed(parsed: Parsed, f?: Fetcher, signal?: AbortSi
       try {
         const source = candidates[i];
         if (entry.type === 'unknown' && source.url === parsed.preview) continue;
-        const meta = await probe(source, f, signal);
+        let meta: Awaited<ReturnType<typeof probe>>;
+        try { meta = await probe(source, f, signal); }
+        catch (e) {
+          const error = asError(e);
+          // One bounded retry for transport failures. Permission, format, expiry
+          // and size failures are never retried or converted into success.
+          if (signal?.aborted || !['TIMEOUT','UPSTREAM_NETWORK'].includes(error.code)) throw error;
+          meta = await probe(source, f, signal);
+        }
         if (meta.bytes && meta.bytes > MAX_TRANSFER) throw new AppError('MEDIA_TOO_LARGE', '资源超过本站单次转发大小限制（18 MiB），需使用经确认的大文件下载后端。', 413);
         chosen = { source, meta }; selectedIndex = i; break;
       } catch (e) { last = asError(e); if (signal?.aborted) break; }
@@ -187,7 +197,7 @@ export async function deliver(req: Request, f?: Fetcher) {
     const headers = new Headers({ 'Content-Type': meta.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
       'Content-Disposition': `${input.searchParams.get('download') === '1' ? 'attachment' : 'inline'}; filename="${ticket.filename}"` });
     for (const name of ['content-length','content-range','accept-ranges']) { const value = response.headers.get(name); if (value && !(name === 'content-length' && response.headers.get('content-encoding'))) headers.set(name, value); }
-    if (req.method === 'HEAD') { await response.body?.cancel(); return new Response(null, { status: response.status, headers }); }
+    if (req.method === 'HEAD') { void response.body?.cancel().catch(() => {}); return new Response(null, { status: response.status, headers }); }
     const data = initial!;
     if (data.bytes.length > MAX_TRANSFER) throw new AppError('MEDIA_TOO_LARGE', '资源超过转发限制。', 413);
     if (!range || /^bytes=0-/.test(range) || response.status === 200) {
@@ -203,10 +213,10 @@ export async function deliver(req: Request, f?: Fetcher) {
           total += value.length;
           if (total > MAX_TRANSFER) throw new AppError('MEDIA_TOO_LARGE', '资源超过转发限制。', 413);
           controller.enqueue(value);
-        } catch (e) { await data.reader.cancel().catch(() => {}); controller.error(e); }
+        } catch (e) { void data.reader.cancel().catch(() => {}); controller.error(e); }
       },
-      cancel(reason) { return data.reader.cancel(reason); },
+      cancel(reason) { void data.reader.cancel(reason).catch(() => {}); },
     });
     return new Response(stream, { status: response.status, headers });
-  } catch (e) { if (initial) await initial.reader.cancel().catch(() => {}); else if (!response.body?.locked) await response.body?.cancel().catch(() => {}); throw e; }
+  } catch (e) { if (initial) void initial.reader.cancel().catch(() => {}); else if (!response.body?.locked) void response.body?.cancel().catch(() => {}); throw e; }
 }
