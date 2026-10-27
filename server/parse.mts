@@ -2,9 +2,11 @@ import { inputUrl, type Platform } from './config.mts';
 import { AppError, asError, failure } from './errors.mts';
 import { parseDouyin } from './douyin.mts';
 import { parseXiaohongshu } from './xiaohongshu.mts';
+import { parseInstagram } from './instagram.mts';
 import { parseProvider } from './provider.mts';
 import { verifyParsed } from './media.mts';
 import type { Fetcher } from './network.mts';
+const publicParsers: Partial<Record<Platform, typeof parseDouyin>> = { douyin: parseDouyin, xiaohongshu: parseXiaohongshu, instagram: parseInstagram };
 export async function handleParse(req: Request, only?: Platform, f?: Fetcher) {
   try {
     if (req.method !== 'POST') throw new AppError('METHOD_NOT_ALLOWED', '请使用 POST 请求解析链接。', 405);
@@ -17,9 +19,10 @@ export async function handleParse(req: Request, only?: Platform, f?: Fetcher) {
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(45000)]);
     let parsed;
     let ownError: AppError | undefined;
-    if (platform === 'douyin' || platform === 'xiaohongshu') {
+    const publicParser = publicParsers[platform];
+    if (publicParser) {
       try {
-        parsed = await (platform === 'douyin' ? parseDouyin : parseXiaohongshu)(url, f, signal);
+        parsed = await publicParser(url, f, signal);
         return Response.json(await verifyParsed(parsed, f, signal), { headers: { 'Cache-Control': 'no-store' } });
       } catch (e) { ownError = asError(e); }
     }

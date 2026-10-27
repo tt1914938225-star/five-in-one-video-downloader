@@ -37,7 +37,7 @@ pnpm run verify:bundle
 ```text
 分享文案 → 前后端分别校验平台域名
   → POST /api/parse（抖音兼容 /api/douyin-parse）
-  → 抖音、小红书公开分享页 / 配置的解析服务
+  → 抖音、小红书、Instagram 公开页面 / 配置的解析服务
   → 平台适配器 → MediaItem + Variant
   → 完整 GET 权限、响应类型、文件头、大小校验
   → 有效资源获得 10 分钟加密下载凭证
@@ -48,6 +48,8 @@ pnpm run verify:bundle
 超时、401/403、404/410、服务故障、HTML 错误页、格式不支持、凭证过期、重定向异常均返回中文错误及稳定错误码。只有封面没有作品媒体时不返回成功。有资源失败时明确返回 `partial`，失败项目没有下载地址。
 
 小红书同时识别 `xhslink.com`、`xhslink.cn` 分享链接，优先读取公开分享页面中对应作品的序列化数据。按作品类型区分视频封面与图集；仅图片条目明确标注实况时建立静态图与动态视频的关联。页面状态仅以 JSON 解析，不执行页面脚本；缺数据或校验失败时使用原解析服务回退。
+
+Instagram 优先读取公开页面中 `xig_polaris_media.if_not_gated_logged_out` 的结构化 JSON，作品 shortcode 必须匹配；按 `media_type`、`carousel_media`、`image_versions2`、`video_versions` 保留完整图集和每个视频。不会调用未公开接口、执行页面脚本或读取登录 Cookie。没有公开媒体数据时明确失败并保留服务回退。
 
 ## 使用限制
 
