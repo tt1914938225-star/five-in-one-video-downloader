@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
+await import('./build.mjs');
 const { handleParse } = await import('../server/parse.mts');
 const { deliver } = await import('../server/media.mts');
 const { failure } = await import('../server/errors.mts');
@@ -8,10 +9,10 @@ createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1:8888');
   try {
     if (!url.pathname.startsWith('/api/')) {
-      const file = url.pathname === '/' ? 'index.html' : url.pathname === '/app.js' ? 'app.js' : null;
+      const file = ({ '/': 'index.html', '/app.js': 'app.js', '/audio-extract.js': 'audio-extract.js', '/mediabunny.LICENSE.txt': 'mediabunny.LICENSE.txt' })[url.pathname];
       if (!file) { res.writeHead(404); res.end(); return; }
-      res.setHeader('content-type', file.endsWith('html') ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8');
-      res.end(await readFile(file)); return;
+      res.setHeader('content-type', file.endsWith('html') ? 'text/html; charset=utf-8' : file.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/plain; charset=utf-8');
+      res.end(await readFile('dist/' + file)); return;
     }
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const request = new Request(url, { method: req.method, headers: req.headers, body: req.method === 'POST' ? Buffer.concat(chunks) : undefined });

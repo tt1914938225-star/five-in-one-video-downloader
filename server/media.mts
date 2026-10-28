@@ -70,7 +70,7 @@ async function prefix(response: Response) {
   } catch (e) { void reader.cancel().catch(() => {}); throw e; }
   return { reader, chunks, bytes: Buffer.concat(chunks) };
 }
-export async function probe(source: Variant, f?: Fetcher, signal?: AbortSignal) {
+export async function probe(source: Variant, f?: Fetcher, signal?: AbortSignal, onMetadata?: (meta: ReturnType<typeof responseMeta>) => void) {
   if (expiredUrl(source.url)) throw new AppError('LINK_EXPIRED', '源站临时媒体地址已过期，请重新解析。', 410);
   // Probe the same full-GET permission used by downloads; a Range-only success may be misleading.
   // Stop reading after the file header rather than buffering the entire object.
@@ -89,6 +89,7 @@ export async function probe(source: Variant, f?: Fetcher, signal?: AbortSignal) 
     try {
       const meta = responseMeta(response, source.type, data.bytes);
       checkBytes(data.bytes, meta.mime);
+      onMetadata?.(meta);
       // An unknown size must be bounded before issuing a download ticket.
       if (!meta.bytes) {
         let size = data.bytes.length;
@@ -133,13 +134,14 @@ export async function verifyParsed(parsed: Parsed, f?: Fetcher, signal?: AbortSi
         const source = candidates[i];
         if (entry.type === 'unknown' && source.url === parsed.preview) continue;
         let meta: Awaited<ReturnType<typeof probe>>;
-        try { meta = await probe(source, f, signal); }
+        const inspect = () => probe(source, f, signal, info => { if (base.type === 'unknown') base.type = info.type; });
+        try { meta = await inspect(); }
         catch (e) {
           const error = asError(e);
           // One bounded retry for transport failures. Permission, format, expiry
           // and size failures are never retried or converted into success.
           if (signal?.aborted || !['TIMEOUT','UPSTREAM_NETWORK'].includes(error.code)) throw error;
-          meta = await probe(source, f, signal);
+          meta = await inspect();
         }
         if (meta.bytes && meta.bytes > MAX_TRANSFER) throw new AppError('MEDIA_TOO_LARGE', '资源超过本站单次转发大小限制（18 MiB），需使用经确认的大文件下载后端。', 413);
         chosen = { source, meta }; selectedIndex = i; break;
