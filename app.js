@@ -1,6 +1,15 @@
 const $ = s => document.querySelector(s);
 const input = $('#url'), go = $('#go'), paste = $('#paste'), result = $('#result');
 const names = { douyin: '抖音', tiktok: 'TikTok', instagram: 'Instagram', twitter: 'X / Twitter', xiaohongshu: '小红书' };
+let renderVersion = 0;
+const audioJobs = new Set(), audioUrls = new Set();
+function clearExtractedAudio() {
+  renderVersion++;
+  for (const job of audioJobs) job.abort();
+  audioJobs.clear();
+  for (const url of audioUrls) URL.revokeObjectURL(url);
+  audioUrls.clear();
+}
 function status(text, bad = false) {
   const node = $('#status'); node.textContent = text; node.style.display = text ? 'block' : 'none'; node.className = 'status' + (bad ? ' bad' : '');
 }
@@ -34,23 +43,74 @@ function publicDebug(data) {
 async function download(resource, button, errorNode) {
   button.disabled = true; button.textContent = '下载中…'; errorNode.textContent = '';
   try {
-    const response = await fetch(resource.downloadUrl, { signal: AbortSignal.timeout(55000), cache: 'no-store' });
+    const { blob, disposition } = resource.localBlob ? { blob: resource.localBlob, disposition: '' } : await fetchMediaBlob(resource, AbortSignal.timeout(55000));
+    const objectUrl = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = disposition.match(/filename="([a-z0-9_.-]+)"/i)?.[1] || resource.filename || `${resource.platform}-${resource.index}`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    status('文件已完整接收，已交给浏览器保存。');
+  } catch (e) { errorNode.textContent = errorText(e); status('下载失败：' + errorText(e), true); }
+  finally { button.disabled = false; button.textContent = '下载'; }
+}
+async function fetchMediaBlob(resource, signal) {
+    const response = await fetch(resource.downloadUrl, { signal, cache: 'no-store' });
     const mime = response.headers.get('content-type') || '';
     if (!response.ok || /json|html|text\//i.test(mime)) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || `下载失败（HTTP ${response.status}），请重新解析。`);
     }
     if (!/^(video|image|audio)\//i.test(mime)) throw new Error('响应不是可下载的媒体文件。');
-    const blob = await response.blob();
+    const limit = 18 * 1024 * 1024;
+    if (Number(response.headers.get('content-length')) > limit) { void response.body?.cancel().catch(() => {}); throw new Error('资源超过本站 18 MiB 的接收限制。'); }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('媒体响应为空。');
+    let size = 0; const chunks = [];
+    try {
+      while (true) {
+        const { done, value } = await reader.read(); if (done) break;
+        size += value.byteLength;
+        if (size > limit) throw new Error('资源超过本站 18 MiB 的接收限制。');
+        chunks.push(value);
+      }
+    } finally { void reader.cancel().catch(() => {}); }
+    const blob = new Blob(chunks, { type: mime.split(';')[0] });
     if (!blob.size) throw new Error('下载文件为空，请重新解析。');
-    const objectUrl = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = objectUrl;
-    const disposition = response.headers.get('content-disposition') || '';
-    a.download = disposition.match(/filename="([a-z0-9_.-]+)"/i)?.[1] || `${resource.platform}-${resource.index}`;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-    status('文件已完整接收，已交给浏览器保存。');
-  } catch (e) { errorNode.textContent = errorText(e); status('下载失败：' + errorText(e), true); }
-  finally { button.disabled = false; button.textContent = '下载'; }
+    return { blob, disposition: response.headers.get('content-disposition') || '' };
+}
+function audioExtractionCard(resource, onExtracted) {
+  const card = element('div', 'media'), row = element('div', 'mrow'), text = element('div', 'mtext');
+  text.append(element('div', 'mname', `视频 ${resource.index} 的音频`), element('div', 'quality', '提取视频中的完整声音，保留原音轨编码'));
+  const actions = element('div', 'actions'), button = element('button', '', '提取音频'), cancel = element('button', '', '取消');
+  const error = element('div', 'error'); cancel.hidden = true;
+  actions.append(button, cancel); row.append(text, actions); card.append(row, error);
+  button.onclick = async () => {
+    if (button.disabled) return;
+    if (audioJobs.size) { error.textContent = '已有音频正在提取，请稍候或取消后重试。'; return; }
+    const version = renderVersion, controller = new AbortController(); audioJobs.add(controller);
+    button.disabled = true; button.textContent = '正在获取视频…'; cancel.hidden = false; error.textContent = '';
+    cancel.onclick = () => controller.abort();
+    const active = () => version === renderVersion && card.isConnected;
+    try {
+      const { blob } = await fetchMediaBlob(resource, AbortSignal.any([controller.signal, AbortSignal.timeout(55000)]));
+      if (!active()) return;
+      button.textContent = '正在提取音频…';
+      const { extractAudio } = await import('/audio-extract.js');
+      const extracted = await extractAudio(blob, { signal: controller.signal, onProgress: progress => { if (active()) button.textContent = progress === null ? '正在提取音频…' : `正在提取 ${progress}%`; } });
+      if (!active() || controller.signal.aborted) return;
+      const url = URL.createObjectURL(extracted.blob); audioUrls.add(url);
+      const derived = { id: resource.id + '-audio', type: 'audio', platform: resource.platform, index: resource.index,
+        title: resource.title, bytes: extracted.blob.size, previewUrl: url, downloadUrl: url,
+        localBlob: extracted.blob, extension: extracted.extension, duration: extracted.duration,
+        filename: `${resource.platform}-${resource.index}-audio.${extracted.extension}` };
+      card.replaceWith(mediaCard(derived, `视频 ${resource.index} 的音频（从视频提取）`));
+      onExtracted({ videoIndex: resource.index, type: 'audio', source: 'video-extraction', bytes: extracted.blob.size,
+        extension: extracted.extension, codec: extracted.codec, duration: extracted.duration, sampleRate: extracted.sampleRate, channels: extracted.channels });
+      status('音频提取完成，可以预览或下载。');
+    } catch (e) {
+      if (active()) { const cancelled = controller.signal.aborted; error.textContent = cancelled ? '已取消音频提取。' : errorText(e); status(cancelled ? error.textContent : '音频提取失败：' + error.textContent, !cancelled); }
+    } finally { audioJobs.delete(controller); if (card.isConnected) { button.disabled = false; button.textContent = '提取音频'; cancel.hidden = true; } }
+  };
+  return card;
 }
 function mediaCard(resource, label, onMetadata = () => {}) {
   const card = element('div', 'media');
@@ -58,6 +118,8 @@ function mediaCard(resource, label, onMetadata = () => {}) {
   const qualityNode = element('div', 'quality');
   const refreshQuality = () => {
     const details = [resource.type === 'audio' ? '音频' : resource.quality || '未提供分辨率'];
+    if (resource.type === 'audio' && resource.extension) details.push(resource.extension.toUpperCase());
+    if (resource.type === 'audio' && resource.duration) { const seconds = Math.round(resource.duration); details.push(`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`); }
     if (resource.qualitySource === 'browser-preview') details.push('预览读取');
     if (resource.bitrate) details.push(`${Math.round(resource.bitrate / 1000)} kbps`);
     if (resource.bytes) details.push(resource.bytes < 1024 ? `${resource.bytes} B` : resource.bytes < 1024 * 1024 ? `${(resource.bytes / 1024).toFixed(1)} KiB` : `${(resource.bytes / 1024 / 1024).toFixed(1)} MiB`);
@@ -94,6 +156,7 @@ function mediaCard(resource, label, onMetadata = () => {}) {
   card.append(row, error); return card;
 }
 function render(data) {
+  clearExtractedAudio();
   $('#title').textContent = data.title; $('#sub').textContent = `来源：${names[data.platform]}${data.author ? ' · ' + data.author : ''}`;
   $('#debug').textContent = publicDebug(data);
   const refreshDetails = () => { $('#debug').textContent = publicDebug(data); };
@@ -112,6 +175,10 @@ function render(data) {
       $('#' + section).appendChild(mediaCard(item, `${label} ${item.index}`, refreshDetails)); counts[section]++;
     }
   }
+  for (const video of data.items.filter(item => item.type === 'video' && item.downloadUrl)) {
+    $('#audios').appendChild(audioExtractionCard(video, metadata => { (data.derivedAudio ||= []).push(metadata); refreshDetails(); }));
+    counts.audios++;
+  }
   for (const [id, key] of [['ls','lives'],['vs','videos'],['is','images'],['as','audios'],['us','unknowns']]) $('#' + id).style.display = counts[key] ? 'block' : 'none';
   const firstImage = data.items.find(i => i.type === 'image' && i.previewUrl)?.previewUrl || data.items.find(i => i.image?.previewUrl)?.image?.previewUrl;
   const cover = $('#cover'), coverUrl = data.previewUrl || firstImage;
@@ -127,6 +194,7 @@ async function parse() {
   if (go.disabled) return;
   try {
     const { url, platform } = cleanUrl(input.value.trim()); input.value = url;
+    clearExtractedAudio();
     go.disabled = paste.disabled = true; result.style.display = 'none';
     status(`已识别：${names[platform]}，正在解析并校验媒体…`);
     const response = await fetch(platform === 'douyin' ? '/api/douyin-parse' : '/api/parse', {
